@@ -30,5 +30,7 @@ public class FourierExternalEditor extends Activity {
         layout.addView(paste);
         setContentView(layout);
         editor.requestFocus();
+        editor.postDelayed(() -> getSystemService(android.view.inputmethod.InputMethodManager.class)
+            .showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT), 450);
     }
 }

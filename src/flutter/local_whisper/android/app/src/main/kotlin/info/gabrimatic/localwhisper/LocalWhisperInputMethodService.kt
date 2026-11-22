@@ -18,6 +18,12 @@ import org.json.JSONArray
 import org.json.JSONException
 
 class LocalWhisperInputMethodService : InputMethodService() {
+    // QA-only handle to the system-bound IME window; never create a test connection.
+    companion object { @JvmField @Volatile var boundKeyboardForTest: LocalWhisperInputMethodService? = null }
+
+    override fun onCreate() { super.onCreate(); boundKeyboardForTest = this }
+    override fun onDestroy() { boundKeyboardForTest = null; super.onDestroy() }
+
     private val verificationToken = "[[LOCAL_WHISPER_KEYBOARD_VERIFIED]]"
 
     override fun onCreateInputView(): View {
