@@ -10,13 +10,16 @@ jobs:
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
       - name: Prepare the same Opus audio which triggered the metadata prefix in Voicebox
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
-          pip -q install huggingface_hub librosa soundfile
+          pip -q install huggingface_hub "numpy<2" librosa==0.11.0 soundfile audioread
           curl -fsSL https://raw.githubusercontent.com/ggml-org/whisper.cpp/b0a11594aec50892a02cd8d129eee2dfe93a8bb8/samples/jfk.wav -o /tmp/jfk.wav
           ffmpeg -loglevel error -i /tmp/jfk.wav -c:a libopus /tmp/jfk.webm
           python - <<'PY'
