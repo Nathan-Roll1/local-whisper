@@ -117,12 +117,21 @@ def edit(expected,tag):
         hit(wait(lambda ns:one(ns,"Choose keyboard",pkg=EDITOR)))
         picker=wait(lambda ns:next((n for n in ns if shown(n) and n.get("package") in ("android","com.android.systemui","com.android.settings") and any(s=="Local Whisper Keyboard" for s in labels(n))),None))
         hit(picker)
-        assert shell("settings","get","secure","default_input_method")==APP+"/.LocalWhisperInputMethodService"
+        deadline=time.monotonic()+25
+        while time.monotonic()<deadline:
+            selected=shell("settings","get","secure","default_input_method")
+            if selected==APP+"/.LocalWhisperInputMethodService":break
+            time.sleep(.3)
+        else:raise RuntimeError("System keyboard selector still reports "+selected)
         initial=wait(field)
     if one(nodes(),"Insert latest transcript") is None:
         hit(initial)
     button=wait(lambda ns:one(ns,"Insert latest transcript"))
-    snap(tag+"-keyboard");hit(button);time.sleep(.65)
+    snap(tag+"-keyboard")
+    native=api("POST",base+"/element",{"using":"-android uiautomator","value":'new UiSelector().packageName("'+APP+'").className("android.widget.Button").textMatches("(?i)Insert latest transcript")'})
+    element=next(iter(native.values()))
+    api("POST",base+"/element/"+element+"/click",{})
+    time.sleep(.65)
     def read(ns):
         n=field(ns)
         if n is None:return None
