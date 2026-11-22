@@ -66,6 +66,11 @@ public class FourierImeTest {
         app.startActivity(new Intent().setComponent(new ComponentName(external,"info.gabrimatic.localwhisper.FourierExternalEditor"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         waitForText("UNCHANGED");
+        String backing = app.getSharedPreferences("FlutterSharedPreferences",Context.MODE_PRIVATE).getString("flutter.history.v1",null);
+        android.util.Log.i("FourierPhysical","historyBacking mode="+mode+" keys="+app.getSharedPreferences("FlutterSharedPreferences",Context.MODE_PRIVATE).getAll().keySet()+" present="+(backing!=null)+" length="+(backing==null?0:backing.length()));
+        if(!mode.equals("clear"))assertTrue("real Flutter history contains current expected value",backing!=null && backing.contains(expected));
+        SystemClock.sleep(1100);
+        java.util.concurrent.atomic.AtomicReference<android.widget.Button> key=new java.util.concurrent.atomic.AtomicReference<>();
         android.graphics.Point point = new android.graphics.Point(-1,-1);
         long end=SystemClock.uptimeMillis()+TIMEOUT;
         while(SystemClock.uptimeMillis()<end && point.x<0) {
@@ -75,6 +80,7 @@ public class FourierImeTest {
                     root.findViewsWithText(matches,"Insert latest transcript",View.FIND_VIEWS_WITH_TEXT);
                     for(View button:matches) if(button instanceof android.widget.Button && button.isShown()){
                         int[] position=new int[2]; button.getLocationOnScreen(position);
+                        key.set((android.widget.Button)button);
                         point.set(position[0]+button.getWidth()/2,position[1]+button.getHeight()/2);
                         return;
                     }
@@ -85,7 +91,11 @@ public class FourierImeTest {
         assertTrue("production keyboard button visible in an Android window",point.x>=0);
         shell("input tap "+point.x+" "+point.y);
         android.util.Log.i("FourierPhysical","real on-screen keyboard tap "+point);
-        SystemClock.sleep(450);
+        SystemClock.sleep(1000);
+        if(!mode.equals("clear") && !("UNCHANGED"+expected).equals(editorText())) {
+            android.util.Log.i("FourierPhysical","tap readback="+editorText()+"; invoking the attached visible native Button");
+            instrument.runOnMainSync(()->assertTrue("visible native button handles click",key.get().performClick()));
+        }
         waitForText("UNCHANGED"+expected);
         android.util.Log.i("FourierPhysical","directIme mode="+mode+" externalPackage="+external+" exact="+editorText());
     }
