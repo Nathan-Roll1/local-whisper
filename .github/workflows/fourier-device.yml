@@ -1,0 +1,42 @@
+name: Fourier Android emulator transcription
+on:
+  push:
+    branches: [qa/fourier-android]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim room for the model and emulator
+        run: sudo rm -rf /usr/local/lib/android/sdk/ndk /opt/ghc /usr/share/dotnet /opt/hostedtoolcache/CodeQL
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Test catalog, sidecar handling and existing mobile behavior
+        working-directory: src/flutter/local_whisper
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+      - name: Allow emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 8192M
+          disk-size: 8192M
+          heap-size: 1024M
+          script: cd src/flutter/local_whisper && flutter test integration_test/native_transcription_test.dart -d emulator-5554 --dart-define=LOCAL_WHISPER_E2E_MODEL=oruk_fourier_2b_sherpa --dart-define=LOCAL_WHISPER_E2E_DOWNLOAD_MODEL=true
