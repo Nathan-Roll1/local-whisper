@@ -9,7 +9,7 @@ test -s "$proto"
 export PYTHONPATH="$t"
 sha256sum "$proto" > "$dir/bundled-proto.sha256"
 adb shell getprop ro.build.fingerprint > "$dir/android-build.txt"
-"$ANDROID_HOME/emulator/emulator" -version | head -5 > "$dir/emulator-build.txt"
+cat "$ANDROID_HOME/emulator/source.properties" > "$dir/emulator-build.txt"
 adb install "$RUNNER_TEMP/audio-probe/probe.apk"
 trap 'adb logcat -d -s FourierMic:I > "$dir/guest-log.txt"; adb shell dumpsys media.audio_flinger | tail -200 > "$dir/audio-diagnostics.txt"' EXIT
 adb shell am start -n org.oruk.qa.audiorecord/.Probe
