@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   gui:
+    if: "!contains(github.event.head_commit.message, '[mic-preflight]')"
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -72,3 +73,35 @@ jobs:
           name: gui-readback-screenshots-and-log
           path: ${{ runner.temp }}/fourier-ui
           retention-days: 7
+
+  mic-preflight:
+    if: contains(github.event.head_commit.message, '[mic-preflight]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build independent Android AudioRecord probe and enable runner KVM
+        run: |
+          python3 -m venv "$RUNNER_TEMP/audio-python"
+          "$RUNNER_TEMP/audio-python/bin/pip" -q install grpcio-tools numpy
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          bash .github/fourier-review/build-audiorecord.sh
+      - name: Record a three-tone sequence using ordinary Android microphone permission
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -grpc 8554
+          script: bash .github/fourier-review/grpc-preflight.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-emulated-audiorecord-preflight
+          path: ${{ runner.temp }}/fourier-mic
+          retention-days: 14
