@@ -19,7 +19,10 @@ void main() {
     final command = File('${support.path}/test-command');
     if (await command.exists()) {
       final phase = (await command.readAsString()).trim();
-      if (phase == 'delete') {
+      if(phase=='seed') {
+        TranscriptEntry entry(String text)=>TranscriptEntry.create(rawText:text,finalText:text,modeName:'Clean',localeId:'en-US',duration:3);
+        await history.saveHistory([entry('Local Whisper Test Audio. The recorder works offline.')]);
+      } else if (phase == 'delete') {
         final entries = await history.loadHistory();
         expect(entries.length, 2);
         await history.deleteHistoryEntry(entries.first.id);

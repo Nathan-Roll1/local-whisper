@@ -5,11 +5,20 @@ import android.util.Log;
 import android.widget.*;
 import android.text.*;
 public class FourierExternalEditor extends Activity {
+    private EditText field;
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if(focused && field!=null) field.postDelayed(() -> {
+            field.requestFocus();
+            getSystemService(android.view.inputmethod.InputMethodManager.class)
+                .showSoftInput(field,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        },250);
+    }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        EditText editor = new EditText(this);
+        EditText editor = new EditText(this); field=editor;
         editor.setSingleLine(true);
         editor.setHint("External editable field");
         editor.setText("UNCHANGED"); editor.setSelection(editor.length());

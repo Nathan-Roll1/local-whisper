@@ -62,27 +62,29 @@ public class FourierImeTest {
         String mode=InstrumentationRegistry.getArguments().getString("mode", "latest");
         String expected=mode.equals("latest")?"Local Whisper Test Audio. The recorder works offline.":mode.equals("delete")?"Previous transcript.":"";
         String ime=app.getPackageName()+"/.LocalWhisperInputMethodService";
-        shell("ime enable "+ime);shell("ime set "+ime);
+        shell("settings put secure show_ime_with_hard_keyboard 1");shell("ime enable "+ime);shell("ime set "+ime);
         app.startActivity(new Intent().setComponent(new ComponentName(external,"info.gabrimatic.localwhisper.FourierExternalEditor"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         waitForText("UNCHANGED");
-        AtomicBoolean clicked=new AtomicBoolean();
+        android.graphics.Point point = new android.graphics.Point(-1,-1);
         long end=SystemClock.uptimeMillis()+TIMEOUT;
-        while(SystemClock.uptimeMillis()<end && !clicked.get()) {
+        while(SystemClock.uptimeMillis()<end && point.x<0) {
             instrument.runOnMainSync(()->{
-                LocalWhisperInputMethodService service=LocalWhisperInputMethodService.boundKeyboardForTest;
-                if(service==null || service.getCurrentInputConnection()==null || service.getCurrentInputEditorInfo()==null ||
-                  !external.equals(service.getCurrentInputEditorInfo().packageName))return;
-                View view=service.getWindow().getWindow().getDecorView();
-                ArrayList<View> matches=new ArrayList<>();
-                view.findViewsWithText(matches,"Insert latest transcript",View.FIND_VIEWS_WITH_TEXT);
-                for(View b:matches) if(b instanceof android.widget.Button && b.isShown() && b.performClick()){
-                    clicked.set(true);break;
+                for(View root : android.view.inspector.WindowInspector.getGlobalWindowViews()){
+                    ArrayList<View> matches=new ArrayList<>();
+                    root.findViewsWithText(matches,"Insert latest transcript",View.FIND_VIEWS_WITH_TEXT);
+                    for(View button:matches) if(button instanceof android.widget.Button && button.isShown()){
+                        int[] position=new int[2]; button.getLocationOnScreen(position);
+                        point.set(position[0]+button.getWidth()/2,position[1]+button.getHeight()/2);
+                        return;
+                    }
                 }
             });
             SystemClock.sleep(150);
         }
-        assertTrue("visible production button bound to external editor",clicked.get());
+        assertTrue("production keyboard button visible in an Android window",point.x>=0);
+        shell("input tap "+point.x+" "+point.y);
+        android.util.Log.i("FourierPhysical","real on-screen keyboard tap "+point);
         SystemClock.sleep(450);
         waitForText("UNCHANGED"+expected);
         android.util.Log.i("FourierPhysical","directIme mode="+mode+" externalPackage="+external+" exact="+editorText());
