@@ -49,10 +49,11 @@ void main() {
     final cached = result.firstWhere((item) => item.id == model);
     expect(cached.state,ModelInstallState.installed);
     await File('${support.path}/fourier-download-ready').writeAsString('ready');
-    final mark = File('${support.path}/fourier-network-checked');
-    for (int i=0; i<120 && !await mark.exists(); i++) {
+    final offlineMarker = File('${support.path}/fourier-network-checked');
+    for (int i=0; i<120 && !await offlineMarker.exists(); i++) {
       await Future<void>.delayed(const Duration(seconds:1));
     }
+    expect(await offlineMarker.exists(), true, reason: 'verified network is offline');
     final source = File('${Directory.systemTemp.path}/ime-fixture.wav');
     final audio = await rootBundle.load('test/fixtures/local_whisper_mock.wav');
     await source.writeAsBytes(audio.buffer.asUint8List(), flush:true);
