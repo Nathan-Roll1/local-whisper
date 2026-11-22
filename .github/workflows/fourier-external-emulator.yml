@@ -39,6 +39,7 @@ jobs:
         run: |
           cd src/flutter/local_whisper
           flutter pub get
+          flutter test --reporter expanded test/onboarding_download_test.dart test/models_test.dart
           flutter build apk --release --target-platform android-x64 --target lib/main.dart
           apk=build/app/outputs/flutter-apk/app-release.apk
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-entries"

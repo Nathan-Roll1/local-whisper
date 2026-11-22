@@ -69,10 +69,24 @@ def go():
     button=min(installs,key=lambda n:abs(pos(n)[1]-y))
     if abs(pos(button)[1]-y)>110:raise RuntimeError("Fourier/Install separation too large "+str(describe(ns)))
     snap("01-fourier-choice");hit(button)
-    deadline=time.monotonic()+950;last=0
+    start=time.monotonic();deadline=start+850;last=0
+    last_changed=start;last_progress=None;retried=False
+
     while time.monotonic()<deadline:
         ns=nodes()
         if one(ns,"Oruk Fourier 2B is ready",contains=True) is not None:break
+        labels_here=[v for n in ns if n.get("package")==APP and shown(n) for v in labels(n)]
+        if "Retry" in labels_here:
+            print("Visible install failure:",labels_here,flush=True);snap("visible-install-error")
+            transient=any(any(k in v.lower() for k in ("timed out","host lookup","network is unreachable","connection reset","503","502","504")) for v in labels_here)
+            if transient and not retried:
+                retried=True;hit(one(ns,"Retry"));last_changed=time.monotonic();continue
+            raise RuntimeError("Visible onboarding error: "+str(labels_here))
+        progress=next((v for v in labels_here if "MiB downloaded" in v),None)
+        if progress!=last_progress:
+            print("Fourier transfer:",progress,flush=True);last_progress=progress;last_changed=time.monotonic()
+        if time.monotonic()-last_changed>185:
+            snap("stalled-install");raise RuntimeError("No further published Fourier progress for three minutes: "+str(labels_here))
         if time.monotonic()-last>25:
             last=time.monotonic();print("Installing original pack:",describe(ns)[:25],flush=True)
         time.sleep(2)
