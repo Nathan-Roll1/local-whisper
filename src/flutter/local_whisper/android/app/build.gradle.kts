@@ -46,6 +46,6 @@ flutter {
 
 dependencies {
     androidTestImplementation("androidx.test:runner:1.3.0")
-    androidTestImplementation("androidx.test:rules:1.3.0")
+    androidTestImplementation("androidx.test:rules:1.2.0")
     androidTestImplementation("junit:junit:4.13.2")
 }
