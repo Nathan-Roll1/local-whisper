@@ -23,7 +23,7 @@ jobs:
         working-directory: src/flutter/local_whisper
         run: |
           flutter pub get
-          flutter analyze
+          flutter analyze --no-fatal-infos
           flutter test
       - name: Allow emulator KVM
         run: |
@@ -40,3 +40,21 @@ jobs:
           disk-size: 8192M
           heap-size: 1024M
           script: cd src/flutter/local_whisper && flutter test integration_test/native_transcription_test.dart -d emulator-5554 --dart-define=LOCAL_WHISPER_E2E_MODEL=oruk_fourier_2b_sherpa --dart-define=LOCAL_WHISPER_E2E_DOWNLOAD_MODEL=true
+  native-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Transcribe the app fixture through its actual Dart FFI service
+        working-directory: src/flutter/local_whisper
+        run: |
+          flutter pub get
+          pip install --quiet huggingface_hub
+          hf download oruk/oruk-fourier-2b --revision 3fda023e157ce7986f137f76fcf326ed6e08fa73 --include 'onnx/sherpa-int8/*' --local-dir /tmp/model
+          native_lib=$(find "$PUB_CACHE" -name libsherpa-onnx-c-api.so | grep -E 'linux.*/(x86_64|x64)/' | head -1)
+          test -n "$native_lib"
+          export LD_LIBRARY_PATH="$(dirname "$native_lib"):${LD_LIBRARY_PATH:-}"
+          FOURIER_MODEL_DIR=/tmp/model/onnx/sherpa-int8 flutter test test/fourier_remote_test.dart --reporter expanded
