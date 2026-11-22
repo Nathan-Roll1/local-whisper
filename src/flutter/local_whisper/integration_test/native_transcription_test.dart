@@ -54,6 +54,13 @@ void main() {
       await _waitForModelFolder(modelPath);
     }
 
+    final filesDir = await getApplicationSupportDirectory();
+    await File('${filesDir.path}/fourier-download-ready').writeAsString('download complete');
+    final marker = File('${filesDir.path}/fourier-network-checked');
+    final deadline = DateTime.now().add(const Duration(seconds: 90));
+    while (!await marker.exists() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
     final audioPath = await _copyFixtureToTemporaryFile();
     final result = await service.transcribeFileForTesting(
       audioPath: audioPath,
@@ -62,6 +69,7 @@ void main() {
       modelPath: modelPath,
     );
 
+    print('FourierPhysical onDevice=${result.onDevice} model=${result.modelId} transcript=${result.transcript}');
     expect(result.onDevice, isTrue);
     expect(result.modelId, model);
     expect(result.transcript.trim(), isNotEmpty);
@@ -69,7 +77,7 @@ void main() {
       result.transcript.toLowerCase(),
       anyOf(contains('local'), contains('whisper'), contains('offline')),
     );
-  });
+  }, timeout: const Timeout(Duration(minutes: 34)));
 }
 
 Future<String> _resolveModelPath(String model) async {
