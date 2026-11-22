@@ -1,7 +1,7 @@
 name: Build Local Whisper physical Fourier test APKs
 on:
   push:
-    branches: [qa/fourier-latest-ime]
+    branches: [qa/fourier-decoded-history-phone]
 permissions:
   contents: read
 jobs:
@@ -20,12 +20,13 @@ jobs:
       - name: Build arm64 debug app and its AndroidX instrumentation test
         working-directory: src/flutter/local_whisper
         run: |
+          curl -fsSL https://raw.githubusercontent.com/ggml-org/whisper.cpp/5eaee0cc9024eb9e9a99469199920c8b7f5cb9ec/samples/jfk.wav -o test/fixtures/jfk.wav
           flutter pub get
           flutter test test/models_test.dart
-          flutter build apk --config-only --debug --target integration_test/native_transcription_test.dart
+          flutter build apk --config-only --debug --target lib/fourier_fixture_driver.dart
           cd android
           defs=$(python3 -c 'import base64; print(",".join(base64.b64encode(v.encode()).decode() for v in ["LOCAL_WHISPER_E2E_MODEL=oruk_fourier_2b_sherpa","LOCAL_WHISPER_E2E_DOWNLOAD_MODEL=true"]))')
-          ./gradlew app:assembleDebug app:assembleDebugAndroidTest -Ptarget=$(pwd)/../integration_test/native_transcription_test.dart -Pdart-defines="$defs" -Ptarget-platform=android-arm64 --no-daemon
+          ./gradlew app:assembleDebug app:assembleDebugAndroidTest -Ptarget=$(pwd)/../lib/fourier_fixture_driver.dart -Pdart-defines="$defs" -Ptarget-platform=android-arm64 --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: physical-test-apks

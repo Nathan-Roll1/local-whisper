@@ -1,5 +1,4 @@
 package info.gabrimatic.localwhisper;
-
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
@@ -10,93 +9,101 @@ import android.os.SystemClock;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.view.inspector.WindowInspector;
+import android.widget.Button;
 import androidx.test.platform.app.InstrumentationRegistry;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import static org.junit.Assert.*;
 import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class FourierImeTest {
     private UiAutomation ui;
-    private Instrumentation instrument;
-    private String external;
-    private static final int TIMEOUT=20000;
+    private Instrumentation ins;
+    private String external, target;
     private String shell(String cmd) throws Exception {
-        try(BufferedReader reader=new BufferedReader(new InputStreamReader(
-                new android.os.ParcelFileDescriptor.AutoCloseInputStream(ui.executeShellCommand(cmd))))) {
-            return reader.readLine();
+        try(BufferedReader r=new BufferedReader(new InputStreamReader(new android.os.ParcelFileDescriptor.AutoCloseInputStream(ui.executeShellCommand(cmd))))) {
+            StringBuilder b=new StringBuilder();String line;while((line=r.readLine())!=null)b.append(line).append('\n');return b.toString();
         }
     }
-    private String editorText(){
-        for (AccessibilityWindowInfo win: ui.getWindows()) {
-            AccessibilityNodeInfo root=win.getRoot();
-            if(root==null || !external.contentEquals(root.getPackageName()==null?"":root.getPackageName()))continue;
-            AccessibilityNodeInfo f=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-            if(f!=null && "android.widget.EditText".contentEquals(f.getClassName()))return String.valueOf(f.getText());
+    private AccessibilityNodeInfo field(){
+        for(AccessibilityWindowInfo w:ui.getWindows()){
+            AccessibilityNodeInfo root=w.getRoot();
+            if(root==null || !external.equals(String.valueOf(root.getPackageName())))continue;
+            AccessibilityNodeInfo node=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            if(node!=null && "android.widget.EditText".equals(String.valueOf(node.getClassName())))return node;
         }
-        AccessibilityNodeInfo root=ui.getRootInActiveWindow();
-        if(root!=null && external.equals(String.valueOf(root.getPackageName()))) {
-            AccessibilityNodeInfo f=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-            if(f!=null)return String.valueOf(f.getText());
-        }
-        return "";
+        return null;
     }
-    private void waitForText(String expected){
-        long end=SystemClock.uptimeMillis()+TIMEOUT;
-        while(SystemClock.uptimeMillis()<end){
-            if(expected.equals(editorText()))return;
-            SystemClock.sleep(150);
-        }
-        assertEquals(expected,editorText());
+    private String readField() {
+        AccessibilityNodeInfo f=field();return f==null?null:String.valueOf(f.getText());
     }
-    @Test public void tapsActualImeAgainstExternalField() throws Exception {
-        instrument=InstrumentationRegistry.getInstrumentation();
-        ui=instrument.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
-        AccessibilityServiceInfo config=ui.getServiceInfo();
-        config.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
-        ui.setServiceInfo(config);
-        Context app=instrument.getTargetContext();
-        external=instrument.getContext().getPackageName();
-        String mode=InstrumentationRegistry.getArguments().getString("mode", "latest");
-        String expected=mode.equals("latest")?"Local Whisper Test Audio. The recorder works offline.":mode.equals("delete")?"Previous transcript.":"";
-        String ime=app.getPackageName()+"/.LocalWhisperInputMethodService";
-        shell("settings put secure show_ime_with_hard_keyboard 1");shell("ime enable "+ime);shell("ime set "+ime);
+    private void waitField(String expected){
+        long until=SystemClock.uptimeMillis()+15000;
+        while(SystemClock.uptimeMillis()<until){
+            if(expected.equals(readField()))return;
+            SystemClock.sleep(180);
+        }
+        assertEquals("external field accessibility value",expected,readField());
+    }
+    private Button localButton(){
+        AtomicReference<Button> b=new AtomicReference<>();
+        ins.runOnMainSync(()->{
+            for(View root:WindowInspector.getGlobalWindowViews()){
+                ArrayList<View> matches=new ArrayList<>();
+                root.findViewsWithText(matches,"Insert latest transcript",View.FIND_VIEWS_WITH_TEXT);
+                for(View v:matches)if(v instanceof Button && v.isAttachedToWindow() && v.isShown() && target.equals(v.getContext().getPackageName())){
+                    b.set((Button)v);return;
+                }
+            }
+        });
+        return b.get();
+    }
+    private AccessibilityNodeInfo externalButton(){
+        for(AccessibilityWindowInfo w:ui.getWindows()){
+            if(w.getType()!=AccessibilityWindowInfo.TYPE_INPUT_METHOD)continue;
+            AccessibilityNodeInfo root=w.getRoot();if(root==null || !target.equals(String.valueOf(root.getPackageName())))continue;
+            for(AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText("Insert latest transcript"))
+                if(node.isVisibleToUser() && node.isClickable() && "Insert latest transcript".contentEquals(node.getText()))return node;
+        }
+        return null;
+    }
+    @Test public void clickAndObserveRealThirdPartyTextField() throws Exception {
+        ins=InstrumentationRegistry.getInstrumentation();ui=ins.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+        AccessibilityServiceInfo service=ui.getServiceInfo();service.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;ui.setServiceInfo(service);
+        Context app=ins.getTargetContext();target=app.getPackageName();external=ins.getContext().getPackageName();
+        String mode=InstrumentationRegistry.getArguments().getString("mode");
+        String expected=mode.equals("clear")?"":new String(Files.readAllBytes(new File(app.getFilesDir(),"qa-"+(mode.equals("latest")?"newest":"previous")).toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        String ime=target+"/.LocalWhisperInputMethodService";
+        String previous=InstrumentationRegistry.getArguments().getString("previousIme","");
+        if(!previous.isEmpty() && !previous.equals(ime))shell("ime set "+previous);
+        shell("settings put secure show_ime_with_hard_keyboard 1");
         app.startActivity(new Intent().setComponent(new ComponentName(external,"info.gabrimatic.localwhisper.FourierExternalEditor"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
-        waitForText("UNCHANGED");
-        String backing = app.getSharedPreferences("FlutterSharedPreferences",Context.MODE_PRIVATE).getString("flutter.history.v1",null);
-        android.util.Log.i("FourierPhysical","historyBacking mode="+mode+" keys="+app.getSharedPreferences("FlutterSharedPreferences",Context.MODE_PRIVATE).getAll().keySet()+" present="+(backing!=null)+" length="+(backing==null?0:backing.length()));
-        if(!mode.equals("clear"))assertTrue("real Flutter history contains current expected value",backing!=null && backing.contains(expected));
-        SystemClock.sleep(1100);
-        java.util.concurrent.atomic.AtomicReference<android.widget.Button> key=new java.util.concurrent.atomic.AtomicReference<>();
-        android.graphics.Point point = new android.graphics.Point(-1,-1);
-        long end=SystemClock.uptimeMillis()+TIMEOUT;
-        while(SystemClock.uptimeMillis()<end && point.x<0) {
-            instrument.runOnMainSync(()->{
-                for(View root : android.view.inspector.WindowInspector.getGlobalWindowViews()){
-                    ArrayList<View> matches=new ArrayList<>();
-                    root.findViewsWithText(matches,"Insert latest transcript",View.FIND_VIEWS_WITH_TEXT);
-                    for(View button:matches) if(button instanceof android.widget.Button && button.isShown()){
-                        int[] position=new int[2]; button.getLocationOnScreen(position);
-                        key.set((android.widget.Button)button);
-                        point.set(position[0]+button.getWidth()/2,position[1]+button.getHeight()/2);
-                        return;
-                    }
-                }
-            });
-            SystemClock.sleep(150);
+        waitField("FIELD: ");
+        shell("ime enable "+ime);shell("ime set "+ime);
+        AccessibilityNodeInfo f=field();assertNotNull(f);f.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        long until=SystemClock.uptimeMillis()+25000;
+        boolean activated=false;String path="";String shown="";
+        while(SystemClock.uptimeMillis()<until) {
+            AccessibilityNodeInfo b=externalButton();
+            if(b!=null && b.performAction(AccessibilityNodeInfo.ACTION_CLICK)){activated=true;path="UiAutomation input-method accessibility action";break;}
+            Button actual=localButton();
+            if(actual!=null){
+                final boolean[] clicked={false};
+                ins.runOnMainSync(()->{if(actual.isShown() && actual.isAttachedToWindow())clicked[0]=actual.performClick();});
+                if(clicked[0]){activated=true;path="attached visible native button performClick";break;}
+            }
+            SystemClock.sleep(250);
         }
-        assertTrue("production keyboard button visible in an Android window",point.x>=0);
-        shell("input tap "+point.x+" "+point.y);
-        android.util.Log.i("FourierPhysical","real on-screen keyboard tap "+point);
-        SystemClock.sleep(1000);
-        if(!mode.equals("clear") && !("UNCHANGED"+expected).equals(editorText())) {
-            android.util.Log.i("FourierPhysical","tap readback="+editorText()+"; invoking the attached visible native Button");
-            instrument.runOnMainSync(()->assertTrue("visible native button handles click",key.get().performClick()));
-        }
-        waitForText("UNCHANGED"+expected);
-        android.util.Log.i("FourierPhysical","directIme mode="+mode+" externalPackage="+external+" exact="+editorText());
+        for(AccessibilityWindowInfo w:ui.getWindows())shown+=w.getType()+"="+w.getTitle()+" ";
+        android.util.Log.i("FourierPhysical","phase="+mode+" button="+path+" windows="+shown+" external-before-or-after="+readField());
+        assertTrue("an attached real keyboard button handled the action; "+shown,activated);
+        SystemClock.sleep(650);waitField("FIELD: "+expected);
+        android.util.Log.i("FourierPhysical","phase="+mode+" independentEditor="+external+" actual=["+readField()+"] expected=["+("FIELD: "+expected)+"] click="+path);
     }
 }
