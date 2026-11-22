@@ -5,7 +5,7 @@ import android.util.Log;
 import android.widget.*;
 import android.text.*;
 public class FourierExternalEditor extends Activity {
-    private EditText field;
+    static EditText field;
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
         if(focused && field!=null) field.postDelayed(() -> {

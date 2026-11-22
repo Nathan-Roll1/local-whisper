@@ -16,24 +16,23 @@ void main() {
     await tester.pumpAndSettle();
     final history = HistoryStore();
     final support = await getApplicationSupportDirectory();
-    final command = File('${support.path}/test-command');
-    if (await command.exists()) {
-      final phase = (await command.readAsString()).trim();
-      if(phase=='seed') {
-        TranscriptEntry entry(String text)=>TranscriptEntry.create(rawText:text,finalText:text,modeName:'Clean',localeId:'en-US',duration:3);
-        await history.saveHistory([entry('Local Whisper Test Audio. The recorder works offline.')]);
-      } else if (phase == 'delete') {
-        final entries = await history.loadHistory();
-        expect(entries.length, 2);
-        await history.deleteHistoryEntry(entries.first.id);
-      } else if (phase == 'clear') {
-        await history.clearHistory();
-      } else {
-        fail('Unknown host command: $phase');
+    TranscriptEntry entry(String text)=>TranscriptEntry.create(rawText:text,finalText:text,modeName:'Clean',localeId:'en-US',duration:3);
+    Future<void> mark(String name)=>File('${support.path}/$name').writeAsString('ready').then((_) {});
+    Future<void> waitFor(String name) async {
+      final deadline=DateTime.now().add(const Duration(minutes:3));
+      final file=File('${support.path}/$name');
+      while (!await file.exists() && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds:200));
       }
-      print('FourierPhysical app history=$phase count=${(await history.loadHistory()).length}');
-      return;
+      expect(await file.exists(),true,reason:'host marker $name');
     }
+    await history.saveHistory([entry('Keyboard preflight.')]);
+    await mark('ime-seeded');
+    await waitFor('ime-seed-checked');
+    await history.clearHistory();
+    expect((await history.loadHistory()).length,0);
+    await mark('ime-empty-before-model');
+    await waitFor('ime-start-model');
     const model = 'oruk_fourier_2b_sherpa';
     final docs = await getApplicationDocumentsDirectory();
     final root = Directory('${docs.path}/models');
@@ -61,10 +60,19 @@ void main() {
       audioPath:source.path,locale:'en-US',model:model,modelPath:cached.localPath!);
     expect(decoded.onDevice,true);
     expect(decoded.transcript,'Local Whisper Test Audio. The recorder works offline.');
-    TranscriptEntry entry(String text)=>TranscriptEntry.create(rawText:text,finalText:text,modeName:'Clean',localeId:'en-US',duration:3);
     final older = entry('Previous transcript.');
     await Future<void>.delayed(const Duration(milliseconds:2));
     await history.saveHistory([entry(decoded.transcript),older]);
-    print('FourierPhysical persisted original model output=${decoded.transcript}');
+    print('FourierPhysical real persisted original model output=${decoded.transcript} pid=$pid');
+    await mark('ime-real-ready');
+    await waitFor('ime-delete');
+    await history.deleteHistoryEntry((await history.loadHistory()).first.id);
+    expect((await history.loadHistory()).single.finalText,'Previous transcript.');
+    await mark('ime-deleted');
+    await waitFor('ime-clear');
+    await history.clearHistory();
+    expect((await history.loadHistory()).isEmpty,true);
+    await mark('ime-cleared');
+    await waitFor('ime-finished');
   },timeout:const Timeout(Duration(minutes:32)));
 }
