@@ -1,0 +1,42 @@
+name: Build Android arm64 release for Fourier and keyboard review
+on:
+  push:
+    branches: [qa/fourier-manual-android]
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Build the ordinary launcher with no instrumentation
+        working-directory: src/flutter/local_whisper
+        run: |
+          flutter pub get
+          flutter build apk --release --target-platform android-arm64 --target lib/main.dart
+          mkdir -p "$RUNNER_TEMP/handset"
+          cp build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/handset/local-whisper-fourier-arm64.apk"
+          cd "$RUNNER_TEMP/handset"
+          apk=local-whisper-fourier-arm64.apk
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt | sort -V | tail -1)
+          "$aapt" dump badging "$apk" > android-package.txt
+          grep -F 'native-code:' android-package.txt | grep -F 'arm64-v8a'
+          grep -F 'launchable-activity:' android-package.txt | grep -F 'MainActivity'
+          "$aapt" dump xmltree "$apk" AndroidManifest.xml > manifest.txt
+          grep -F 'LocalWhisperInputMethodService' manifest.txt
+          if grep -Ei 'Fourier(ImeProbe|FieldReadback|ExternalEditor)|androidx.test.runner.AndroidJUnitRunner|^ *E: instrumentation' manifest.txt; then exit 1; fi
+          if unzip -Z1 "$apk" | grep -E '\.(onnx|onnx.data|safetensors|gguf)$'; then exit 1; fi
+          sha256sum "$apk" | tee SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-whisper-fourier-arm64-handset
+          path: ${{ runner.temp }}/handset
+          retention-days: 30
