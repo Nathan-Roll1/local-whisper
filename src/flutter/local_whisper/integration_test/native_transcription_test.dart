@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
+import 'package:local_whisper_flutter/src/models.dart';
+import 'package:local_whisper_flutter/src/app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_whisper_flutter/main.dart' as app;
@@ -45,11 +48,21 @@ void main() {
         final selected = (await store.loadModels()).firstWhere(
           (item) => item.id == model,
         );
-        await store.downloadModel(
-          selected,
-          onProgress: (_) {},
-          cancelToken: ModelDownloadCancelToken(),
-        );
+        final first = ModelDownloadCancelToken();
+        await expectLater(store.downloadModel(selected, onProgress: (p) {
+          if (p.installedBytes > 33 * 1024 * 1024) first.cancel();
+        }, cancelToken: first), throwsA(isA<ModelDownloadCanceledException>()));
+        final root = Directory(modelPath).parent;
+        final partialFiles = await root.list(recursive: true).where((f) =>
+          f is File && f.path.contains('.resume/')).cast<File>().toList();
+        final retained = partialFiles.fold<int>(0, (n,f) => n + f.lengthSync());
+        expect(retained, greaterThan(32 * 1024 * 1024));
+        final fresh = ModelStore(HistoryStore(), modelDirectory: root);
+        await fresh.loadModels();
+        print('FourierPhysical interrupted retainedBytes=$retained cachedFiles=${partialFiles.length}');
+        await fresh.downloadModel(selected, onProgress: (_) {},
+          cancelToken: ModelDownloadCancelToken());
+        print('FourierPhysical retryInstalled disk_file_count=${Directory(modelPath).listSync(recursive:true).whereType<File>().length}');
       }
       await _waitForModelFolder(modelPath);
     }
@@ -61,6 +74,10 @@ void main() {
     while (!await marker.exists() && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(seconds: 1));
     }
+    final installed = (await ModelStore(HistoryStore(),
+      modelDirectory: Directory(modelPath).parent).loadModels()).firstWhere((m) => m.id == model);
+    expect(installed.state, ModelInstallState.installed);
+    print('FourierPhysical cached model selected bytes=${installed.installedBytes} files=${installed.installedFiles} pid=$pid');
     final audioPath = await _copyFixtureToTemporaryFile();
     final result = await service.transcribeFileForTesting(
       audioPath: audioPath,
@@ -72,11 +89,28 @@ void main() {
     print('FourierPhysical onDevice=${result.onDevice} model=${result.modelId} transcript=${result.transcript}');
     expect(result.onDevice, isTrue);
     expect(result.modelId, model);
-    expect(result.transcript.trim(), isNotEmpty);
-    expect(
-      result.transcript.toLowerCase(),
-      anyOf(contains('local'), contains('whisper'), contains('offline')),
-    );
+    expect(result.transcript, 'Local Whisper Test Audio. The recorder works offline.');
+    final status = File('/proc/self/status').readAsLinesSync()
+      .where((l) => l.startsWith('VmHWM:') || l.startsWith('VmRSS:')).join(' ');
+    print('FourierPhysical post_decode_memory $status');
+    final hs = HistoryStore();
+    await hs.saveOnboardingComplete(true);
+    await hs.saveHistory([TranscriptEntry.create(rawText: result.transcript,
+        finalText: result.transcript, modeName: 'Clean', localeId: 'en-US', duration: 3)]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const LocalWhisperApp());
+    for (var i = 0; i < 30 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    final historyTab = find.descendant(of: find.byType(NavigationBar),matching:find.text('History'));
+    await tester.tap(historyTab);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Copy').first);
+    await tester.pumpAndSettle();
+    final clip = await Clipboard.getData('text/plain');
+    expect(clip?.text,result.transcript);
+    print('FourierPhysical historyCopyButton=passed clipboard=${clip?.text}');
   }, timeout: const Timeout(Duration(minutes: 34)));
 }
 

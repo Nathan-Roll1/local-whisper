@@ -21,6 +21,7 @@ jobs:
         working-directory: src/flutter/local_whisper
         run: |
           flutter pub get
+          flutter test test/models_test.dart
           flutter build apk --config-only --debug --target integration_test/native_transcription_test.dart
           cd android
           defs=$(python3 -c 'import base64; print(",".join(base64.b64encode(v.encode()).decode() for v in ["LOCAL_WHISPER_E2E_MODEL=oruk_fourier_2b_sherpa","LOCAL_WHISPER_E2E_DOWNLOAD_MODEL=true"]))')
