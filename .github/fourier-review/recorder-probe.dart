@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() => runApp(const MaterialApp(home: Probe()));
 class Probe extends StatefulWidget {
@@ -26,8 +25,18 @@ class _ProbeState extends State<Probe> {
         final result=await speech.invokeMapMethod<String,dynamic>('stop');
         final ms=watch.elapsedMilliseconds;
         final file=File(result!['audioPath'] as String);
-        final dir=await getExternalStorageDirectory();
-        await file.copy('${dir!.path}/finalized-microphone.wav');
+        // Offer only the synthetic fixture produced by this QA run on loopback.
+        final server=await HttpServer.bind(InternetAddress.loopbackIPv4,17609);
+        server.listen((request) async {
+          if(request.uri.path!='/finalized-microphone.wav') {
+            request.response.statusCode=404;
+          } else {
+            request.response.headers.contentType=ContentType('audio','wav');
+            request.response.contentLength=await file.length();
+            await request.response.addStream(file.openRead());
+          }
+          await request.response.close();
+        });
         print('FOURIER_NATIVE_RECORDER FINALIZED ms=$ms bytes=${await file.length()} reportedDuration=${result["duration"]} sampleRate=${result["sampleRate"]}');
         setState(()=>state='finished');
       }

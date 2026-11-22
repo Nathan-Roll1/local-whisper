@@ -24,5 +24,7 @@ espeak -v en-us -s 145 -w "$e/spoken.wav" 'The blue notebook is on the table.'
 for i in $(seq 1 65); do adb logcat -d -s flutter:I | grep -q 'FOURIER_NATIVE_RECORDER FINALIZED' && break; sleep .5; done
 adb logcat -d -s flutter:I | grep 'FOURIER_NATIVE_RECORDER' | tee "$e/method-channel.txt"
 grep -q FINALIZED "$e/method-channel.txt"
-adb pull "/sdcard/Android/data/$app/files/finalized-microphone.wav" "$e/finalized-microphone.wav"
+adb forward tcp:17609 tcp:17609
+curl --fail --silent --show-error --max-time 20 http://127.0.0.1:17609/finalized-microphone.wav -o "$e/finalized-microphone.wav"
+adb forward --remove tcp:17609
 "$py" .github/fourier-review/compare-captured.py "$e"
