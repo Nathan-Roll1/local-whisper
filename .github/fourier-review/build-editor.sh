@@ -19,7 +19,14 @@ public class Editor extends Activity {
     field.setSingleLine(false);
     field.setHint("Independent editor");
     field.setGravity(android.view.Gravity.TOP);
-    setContentView(field);
+    android.widget.LinearLayout root=new android.widget.LinearLayout(this);
+    root.setOrientation(1);
+    android.widget.Button picker=new android.widget.Button(this);
+    picker.setText("Choose keyboard");
+    picker.setOnClickListener(v -> getSystemService(android.view.inputmethod.InputMethodManager.class).showInputMethodPicker());
+    root.addView(picker);
+    root.addView(field,new android.widget.LinearLayout.LayoutParams(-1,0,1));
+    setContentView(root);
     field.requestFocus();
   }
   @Override public void onWindowFocusChanged(boolean focused) {

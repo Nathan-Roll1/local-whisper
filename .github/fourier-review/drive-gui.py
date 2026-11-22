@@ -92,30 +92,33 @@ def go():
         time.sleep(2)
     else:raise RuntimeError("Model not ready: "+str(describe(ns)))
     snap("02-fourier-installed")
-    tap("Continue");tap("Continue");tap("Continue")
+    tap("Continue")
+    tap("Allow")
+    allow=wait(lambda ns:next((n for n in ns if shown(n) and n.get("package","").endswith("permissioncontroller") and any(s.casefold()=="while using the app" for s in labels(n))),None))
+    hit(allow);tap("Continue")
+    tap("Continue")
     finish=wait(lambda ns:next(iter(find(ns,"Use without keyboard")+find(ns,"Finish setup")),None))
     hit(finish);wait(lambda ns:one(ns,"Start recording"))
     print("Ordinary launcher completed setup with the original Fourier model.",flush=True)
 def record(path,words,tag):
     nav("Record");tap("Start recording");wait(lambda ns:one(ns,"Stop recording"));time.sleep(.6)
-    adb("emu","avd","hostmicon")
-    capture=""
-    for _ in range(12):
-        capture=subprocess.check_output(["pactl","list","short","source-outputs"],text=True)
-        if capture.strip():break
-        time.sleep(.25)
-    (OUT/(tag+"-active-capture.txt")).write_text(capture)
-    if not capture.strip():raise RuntimeError("No PulseAudio capture stream while recorder was recording")
-    print("Emulator source outputs:",capture,flush=True)
-    subprocess.run(["paplay","--device=fourier_fixture",str(path)],check=True)
+    result=subprocess.run([os.environ["QA_GRPC_PY"],".github/fourier-review/grpc-audio.py","--speech-padding",str(path)],text=True,capture_output=True)
+    (OUT/(tag+"-grpc.txt")).write_text(result.stdout+result.stderr)
+    result.check_returncode();print(result.stdout,flush=True)
     time.sleep(.4);tap("Stop recording")
-    out=wait(lambda ns:transcript(ns,words),120);nav("History");history=wait(lambda ns:transcript(ns,words))
+    out=wait(lambda ns:transcript(ns,words),300);nav("History");history=wait(lambda ns:transcript(ns,words))
     if history!=out:raise RuntimeError(f"{out!r} differed from {history!r}")
     snap(tag+"-history");print(tag,"recognized in History:",repr(history),flush=True);return history
 def edit(expected,tag):
     shell("am","force-stop",EDITOR);shell("am","start","-n",EDITOR+"/.Editor")
     def field(ns):return next((n for n in ns if n.get("class")=="android.widget.EditText" and n.get("package")==EDITOR and shown(n)),None)
     initial=wait(field)
+    if shell("settings","get","secure","default_input_method")!=APP+"/.LocalWhisperInputMethodService":
+        hit(wait(lambda ns:one(ns,"Choose keyboard",pkg=EDITOR)))
+        picker=wait(lambda ns:next((n for n in ns if shown(n) and n.get("package") in ("android","com.android.systemui","com.android.settings") and any(s=="Local Whisper Keyboard" for s in labels(n))),None))
+        hit(picker)
+        assert shell("settings","get","secure","default_input_method")==APP+"/.LocalWhisperInputMethodService"
+        initial=wait(field)
     if one(nodes(),"Insert latest transcript") is None:
         hit(initial)
     button=wait(lambda ns:one(ns,"Insert latest transcript"))
@@ -127,7 +130,22 @@ def edit(expected,tag):
         if not expected and (actual=='Independent editor' or n.get('showing-hint')=='true'):actual=''
         return actual if actual==expected else None
     actual=wait(read,14);print(tag,"independent field:",repr(actual),flush=True);snap(tag+"-readback")
+def enable_keyboard():
+    shell("am","start","-a","android.settings.INPUT_METHOD_SETTINGS")
+    enable=wait(lambda ns:one(ns,"Local Whisper Keyboard",pkg="com.android.settings"))
+    hit(enable)
+    for _ in range(8):
+        ns=nodes()
+        confirmation=next((n for n in ns if shown(n) and n.get("package") in ("android","com.android.settings") and any(s.casefold() in ("ok","allow") for s in labels(n))),None)
+        if confirmation is not None:hit(confirmation);continue
+        if APP+"/.LocalWhisperInputMethodService" in shell("ime","list","-s"):break
+        time.sleep(1)
+    assert APP+"/.LocalWhisperInputMethodService" in shell("ime","list","-s"),"IME missing from the visibly enabled list"
+    shell("input","keyevent","KEYCODE_BACK")
+
 def main():
+    enable_keyboard()
+    edit("","00-empty")
     go()
     shell("cmd","connectivity","airplane-mode","enable");shell("svc","wifi","disable");shell("svc","data","disable");time.sleep(3)
     default=[l.strip() for l in shell("dumpsys","connectivity").splitlines() if "active default network" in l.lower()]
