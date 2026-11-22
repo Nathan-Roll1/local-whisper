@@ -5,6 +5,9 @@ mkdir -p "$EVIDENCE"
 adb shell getprop ro.product.cpu.abi
 adb shell wm size 1080x2200
 adb shell wm density 240
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+sleep 8
 adb install src/flutter/local_whisper/build/app/outputs/flutter-apk/app-release.apk
 adb install "$RUNNER_TEMP/editor/editor.apk"
 adb shell settings put secure show_ime_with_hard_keyboard 1

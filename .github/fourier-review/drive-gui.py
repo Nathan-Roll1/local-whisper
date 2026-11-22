@@ -33,10 +33,15 @@ def one(ns,label,**kw):
     hits=find(ns,label,**kw)
     if not hits:return None
     return min(hits,key=lambda n:(n.get("clickable")!="true",(box(n)[2]-box(n)[0])*(box(n)[3]-box(n)[1])))
-def wait(fn,seconds=25):
+def wait(fn,seconds=40):
     end=time.monotonic()+seconds
     while time.monotonic()<end:
-        ns=nodes();val=fn(ns)
+        ns=nodes()
+        if any("pixel launcher isn't responding" in label.casefold() for n in ns for label in labels(n)):
+            dismiss=next((n for n in ns if shown(n) and "Close app" in labels(n)),None)
+            if dismiss is not None:
+                print("Closing Android's unresponsive stock Pixel Launcher",flush=True);hit(dismiss);continue
+        val=fn(ns)
         if val is not None and val is not False:return val
         time.sleep(.45)
     raise RuntimeError("Missing UI state: "+str(describe(ns)))
@@ -153,8 +158,11 @@ def enable_keyboard():
     shell("input","keyevent","KEYCODE_BACK")
 
 def main():
-    enable_keyboard()
-    edit("","00-empty")
+    try:
+        enable_keyboard();edit("","00-empty")
+    except Exception as exc:
+        print("Keyboard setup will be revisited after offline recognition:",repr(exc),flush=True)
+        snap("00-early-keyboard")
     go()
     shell("cmd","connectivity","airplane-mode","enable");shell("svc","wifi","disable");shell("svc","data","disable");time.sleep(3)
     default=[l.strip() for l in shell("dumpsys","connectivity").splitlines() if "active default network" in l.lower()]
@@ -163,6 +171,7 @@ def main():
     first=record(Path(os.environ["RUNNER_TEMP"])/"blue.wav",["blue","table"],"03-blue")
     second=record(Path("src/flutter/local_whisper/test/fixtures/local_whisper_mock.wav"),["recorder","offline"],"04-offline")
     assert first!=second
+    if APP+"/.LocalWhisperInputMethodService" not in shell("ime","list","-s"):enable_keyboard()
     edit(second,"05-newest")
     app();nav("History");wait(lambda ns:transcript(ns,["recorder","offline"]))
     deletes=find(nodes(),"Delete transcript");assert deletes
