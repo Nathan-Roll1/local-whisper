@@ -1,7 +1,7 @@
 name: Build Local Whisper physical Fourier test APKs
 on:
   push:
-    branches: [qa/fourier-physical]
+    branches: [qa/fourier-latest-ime]
 permissions:
   contents: read
 jobs:

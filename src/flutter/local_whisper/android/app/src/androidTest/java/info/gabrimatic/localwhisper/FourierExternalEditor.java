@@ -12,6 +12,7 @@ public class FourierExternalEditor extends Activity {
         EditText editor = new EditText(this);
         editor.setSingleLine(true);
         editor.setHint("External editable field");
+        editor.setText("UNCHANGED"); editor.setSelection(editor.length());
         editor.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int a,int c,int n){}
             public void onTextChanged(CharSequence s,int a,int b,int c){Log.i("FourierPhysical","externalText="+s);}
