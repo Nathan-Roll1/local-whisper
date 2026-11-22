@@ -36,7 +36,14 @@ void main() {
     final root = Directory('${docs.path}/models');
     final store = ModelStore(history,modelDirectory:root);
     final m = (await store.loadModels()).firstWhere((m) => m.id == model);
-    final result = await store.downloadModel(m,onProgress:(_){},cancelToken:ModelDownloadCancelToken());
+    final interrupted = ModelDownloadCancelToken();
+    await expectLater(store.downloadModel(m,onProgress:(p){
+      if (p.installedBytes > 33 * 1024 * 1024) interrupted.cancel();
+    },cancelToken:interrupted), throwsA(isA<ModelDownloadCanceledException>()));
+    final partials = root.listSync(recursive:true).whereType<File>().where((f)=>f.path.contains('.resume/'));
+    print('FourierPhysical direct test cached bytes=${partials.fold<int>(0,(n,f)=>n+f.lengthSync())}');
+    final fresh = ModelStore(history,modelDirectory:root);
+    final result = await fresh.downloadModel(m,onProgress:(_){},cancelToken:ModelDownloadCancelToken());
     final cached = result.firstWhere((item) => item.id == model);
     expect(cached.state,ModelInstallState.installed);
     await File('${support.path}/fourier-download-ready').writeAsString('ready');

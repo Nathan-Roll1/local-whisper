@@ -570,6 +570,7 @@ class ModelStore {
         cancelToken.throwIfCanceled();
         if (response.statusCode == HttpStatus.partialContent) {
           final range = response.headers.value(HttpHeaders.contentRangeHeader);
+          print('FourierPhysical rangeStatus=${response.statusCode} reusedOffset=$offset remoteRange=$range file=$path');
           if (offset == 0 ||
               range != 'bytes $offset-${declaredSize - 1}/$declaredSize') {
             await response.drain<void>();

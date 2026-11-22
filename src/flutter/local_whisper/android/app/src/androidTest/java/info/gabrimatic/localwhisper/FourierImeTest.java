@@ -36,6 +36,11 @@ public class FourierImeTest {
             AccessibilityNodeInfo f=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
             if(f!=null && "android.widget.EditText".contentEquals(f.getClassName()))return String.valueOf(f.getText());
         }
+        AccessibilityNodeInfo root=ui.getRootInActiveWindow();
+        if(root!=null && external.equals(String.valueOf(root.getPackageName()))) {
+            AccessibilityNodeInfo f=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            if(f!=null)return String.valueOf(f.getText());
+        }
         return "";
     }
     private void waitForText(String expected){
