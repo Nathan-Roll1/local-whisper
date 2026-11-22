@@ -69,7 +69,7 @@ def go():
     button=min(installs,key=lambda n:abs(pos(n)[1]-y))
     if abs(pos(button)[1]-y)>110:raise RuntimeError("Fourier/Install separation too large "+str(describe(ns)))
     snap("01-fourier-choice");hit(button)
-    start=time.monotonic();deadline=start+850;last=0
+    start=time.monotonic();deadline=start+3600;last=0
     last_changed=start;last_progress=None;retried=False
 
     while time.monotonic()<deadline:
@@ -85,8 +85,8 @@ def go():
         progress=next((v for v in labels_here if "MiB downloaded" in v),None)
         if progress!=last_progress:
             print("Fourier transfer:",progress,flush=True);last_progress=progress;last_changed=time.monotonic()
-        if time.monotonic()-last_changed>185:
-            snap("stalled-install");raise RuntimeError("No further published Fourier progress for three minutes: "+str(labels_here))
+        if time.monotonic()-last_changed>420:
+            snap("stalled-install");raise RuntimeError("No further published Fourier progress for seven minutes: "+str(labels_here))
         if time.monotonic()-last>25:
             last=time.monotonic();print("Installing original pack:",describe(ns)[:25],flush=True)
         time.sleep(2)
@@ -98,7 +98,12 @@ def go():
     print("Ordinary launcher completed setup with the original Fourier model.",flush=True)
 def record(path,words,tag):
     nav("Record");tap("Start recording");wait(lambda ns:one(ns,"Stop recording"));time.sleep(.6)
-    capture=subprocess.check_output(["pactl","list","short","source-outputs"],text=True)
+    adb("emu","avd","hostmicon")
+    capture=""
+    for _ in range(12):
+        capture=subprocess.check_output(["pactl","list","short","source-outputs"],text=True)
+        if capture.strip():break
+        time.sleep(.25)
     (OUT/(tag+"-active-capture.txt")).write_text(capture)
     if not capture.strip():raise RuntimeError("No PulseAudio capture stream while recorder was recording")
     print("Emulator source outputs:",capture,flush=True)
@@ -110,7 +115,11 @@ def record(path,words,tag):
 def edit(expected,tag):
     shell("am","force-stop",EDITOR);shell("am","start","-n",EDITOR+"/.Editor")
     def field(ns):return next((n for n in ns if n.get("class")=="android.widget.EditText" and n.get("package")==EDITOR and shown(n)),None)
-    hit(wait(field));button=wait(lambda ns:one(ns,"Insert latest transcript"));snap(tag+"-keyboard");hit(button);time.sleep(.65)
+    initial=wait(field)
+    if one(nodes(),"Insert latest transcript") is None:
+        hit(initial)
+    button=wait(lambda ns:one(ns,"Insert latest transcript"))
+    snap(tag+"-keyboard");hit(button);time.sleep(.65)
     def read(ns):
         n=field(ns)
         if n is None:return None
