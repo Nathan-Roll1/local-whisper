@@ -1,0 +1,37 @@
+name: Fourier protocol marker with mobile sherpa 1.13.8
+on:
+  push:
+    branches: [qa/fourier-marker]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Prepare the same Opus audio which triggered the metadata prefix in Voicebox
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip -q install huggingface_hub librosa soundfile
+          curl -fsSL https://raw.githubusercontent.com/ggml-org/whisper.cpp/b0a11594aec50892a02cd8d129eee2dfe93a8bb8/samples/jfk.wav -o /tmp/jfk.wav
+          ffmpeg -loglevel error -i /tmp/jfk.wav -c:a libopus /tmp/jfk.webm
+          python - <<'PY'
+          import librosa,soundfile as sf
+          capture,sr=librosa.load('/tmp/jfk.webm',sr=24000,mono=True)
+          sf.write('/tmp/capture.wav',capture,sr)
+          mono,sr=librosa.load('/tmp/capture.wav',sr=16000,mono=True)
+          sf.write('/tmp/phone-input.wav',mono,sr,subtype='PCM_16')
+          PY
+          hf download oruk/oruk-fourier-2b --revision 3fda023e157ce7986f137f76fcf326ed6e08fa73 --include 'onnx/sherpa-int8/*' --local-dir /tmp/model
+      - name: Decode both recordings through the actual Flutter sherpa adapter
+        working-directory: src/flutter/local_whisper
+        run: |
+          flutter pub get
+          native_lib=$(find "$PUB_CACHE" -name libsherpa-onnx-c-api.so | grep -E 'linux.*/(x86_64|x64)/' | head -1)
+          test -n "$native_lib"
+          export LD_LIBRARY_PATH="$(dirname "$native_lib"):${LD_LIBRARY_PATH:-}"
+          flutter test test/fourier_marker_test.dart --reporter expanded
