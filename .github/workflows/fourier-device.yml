@@ -22,7 +22,7 @@ jobs:
       - name: Test catalog, sidecar handling and existing mobile behavior
         working-directory: src/flutter/local_whisper
         run: |
-          flutter pub get --enforce-lockfile
+          flutter pub get
           flutter analyze
           flutter test
       - name: Allow emulator KVM
